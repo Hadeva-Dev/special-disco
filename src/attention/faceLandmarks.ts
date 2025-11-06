@@ -42,24 +42,60 @@ async function initializeFaceLandmarker(): Promise<FaceLandmarker> {
     return faceLandmarker;
   }
 
-  const filesetResolver = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-  );
+  console.log("[FaceLandmarks] Initializing MediaPipe Face Landmarker...");
 
-  faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-    baseOptions: {
-      modelAssetPath:
-        "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-      delegate: "GPU",
-    },
-    runningMode: "VIDEO",
-    numFaces: 1,
-    minFaceDetectionConfidence: 0.5,
-    minFacePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-  });
+  try {
+    const filesetResolver = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+    );
 
-  return faceLandmarker;
+    console.log("[FaceLandmarks] FilesetResolver created, loading model...");
+
+    faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "GPU",
+      },
+      runningMode: "VIDEO",
+      numFaces: 1,
+      minFaceDetectionConfidence: 0.5,
+      minFacePresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
+    });
+
+    console.log("[FaceLandmarks] ✓ MediaPipe Face Landmarker initialized successfully!");
+    return faceLandmarker;
+  } catch (error) {
+    console.error("[FaceLandmarks] ❌ Failed to initialize MediaPipe:", error);
+
+    // Try fallback with CPU delegate if GPU fails
+    try {
+      console.log("[FaceLandmarks] Retrying with CPU delegate...");
+      const filesetResolver = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      );
+
+      faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+          delegate: "CPU", // Fallback to CPU
+        },
+        runningMode: "VIDEO",
+        numFaces: 1,
+        minFaceDetectionConfidence: 0.5,
+        minFacePresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+
+      console.log("[FaceLandmarks] ✓ MediaPipe initialized with CPU delegate");
+      return faceLandmarker;
+    } catch (cpuError) {
+      console.error("[FaceLandmarks] ❌ CPU fallback also failed:", cpuError);
+      throw cpuError;
+    }
+  }
 }
 
 function extractLandmarks(result: FaceLandmarkerResult): FaceLandmarks | null {

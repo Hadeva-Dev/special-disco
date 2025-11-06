@@ -1,21 +1,21 @@
 /**
- * Camera tracking UI page for Chrome extension (Simplified)
- * Note: Camera access requires this to be run on actual web pages, not extension pages
+ * Camera tracking UI page for Chrome extension
  */
 
 import { AttentionSettings, AttentionState } from "./shared/types";
 import {
   getAttentionSettings,
   saveAttentionSettings,
+  resetAttentionSettings,
 } from "./attentionSettings";
 
 // DOM Elements
-// Status elements
-const detectionStatusEl = document.getElementById("detection-status") as HTMLDivElement;
-const attentionStateEl = document.getElementById("attention-state") as HTMLSpanElement;
-const lastUpdateEl = document.getElementById("last-update") as HTMLSpanElement;
+const webcam = document.getElementById("webcam") as HTMLVideoElement;
+const toggleCameraBtn = document.getElementById("toggle-camera") as HTMLButtonElement;
+const toggleOverlayBtn = document.getElementById("toggle-overlay") as HTMLButtonElement;
 
 // Metric elements
+const attentionStateEl = document.getElementById("attention-state") as HTMLDivElement;
 const earValueEl = document.getElementById("ear-value") as HTMLDivElement;
 const closedDurationEl = document.getElementById("closed-duration") as HTMLDivElement;
 const confidenceEl = document.getElementById("confidence") as HTMLDivElement;
@@ -31,9 +31,24 @@ const detectorCheckboxes = {
   blinkRate: document.getElementById("detector-blink-rate") as HTMLInputElement,
 };
 
+const thresholdSliders = {
+  ear: document.getElementById("threshold-ear") as HTMLInputElement,
+  drowsy: document.getElementById("threshold-drowsy") as HTMLInputElement,
+  microsleep: document.getElementById("threshold-microsleep") as HTMLInputElement,
+};
+
+const thresholdValues = {
+  ear: document.getElementById("ear-threshold-value") as HTMLSpanElement,
+  drowsy: document.getElementById("drowsy-seconds-value") as HTMLSpanElement,
+  microsleep: document.getElementById("microsleep-seconds-value") as HTMLSpanElement,
+};
+
 const saveSettingsBtn = document.getElementById("save-settings") as HTMLButtonElement;
+const resetSettingsBtn = document.getElementById("reset-settings") as HTMLButtonElement;
 
 // State
+let cameraActive = false;
+let stream: MediaStream | null = null;
 let settings: AttentionSettings;
 
 /**
@@ -54,45 +69,7 @@ async function init() {
     }
   });
 
-  // Update status based on settings
-  updateDetectionStatus(settings.enabled);
-
-  // Periodically check camera status
-  updateCameraStatus();
-  setInterval(updateCameraStatus, 2000);
-
   console.log("[CameraPage] Initialized");
-}
-
-/**
- * Update camera status display with live info from offscreen document
- */
-async function updateCameraStatus() {
-  try {
-    const response = await chrome.runtime.sendMessage({ type: "GET_CAMERA_STATUS" });
-
-    if (response?.isRunning) {
-      detectionStatusEl.textContent = `Active (${response.frameCount || 0} frames)`;
-      detectionStatusEl.style.color = "#10b981"; // green
-    } else {
-      detectionStatusEl.textContent = settings.enabled ? "Ready (not running)" : "Disabled";
-      detectionStatusEl.style.color = settings.enabled ? "#f59e0b" : "#ef4444"; // yellow or red
-    }
-  } catch (error) {
-    // Offscreen document might not exist
-    detectionStatusEl.textContent = settings.enabled ? "Ready" : "Disabled";
-    detectionStatusEl.style.color = settings.enabled ? "#f59e0b" : "#ef4444";
-  }
-}
-
-/**
- * Update detection status display
- */
-function updateDetectionStatus(enabled: boolean) {
-  if (detectionStatusEl) {
-    detectionStatusEl.textContent = enabled ? "Active" : "Disabled";
-    detectionStatusEl.style.color = enabled ? "#10b981" : "#ef4444";
-  }
 }
 
 /**
@@ -106,6 +83,16 @@ function populateSettingsUI(settings: AttentionSettings) {
       detectorCheckboxes[key as keyof typeof detectorCheckboxes].checked = value;
     }
   });
+
+  thresholdSliders.ear.value = settings.thresholds.earThreshold.toString();
+  thresholdSliders.drowsy.value = settings.thresholds.drowsySeconds.toString();
+  thresholdSliders.microsleep.value = settings.thresholds.microsleepSeconds.toString();
+
+  thresholdValues.ear.textContent = settings.thresholds.earThreshold.toFixed(2);
+  thresholdValues.drowsy.textContent = settings.thresholds.drowsySeconds.toFixed(1);
+  thresholdValues.microsleep.textContent = settings.thresholds.microsleepSeconds.toFixed(1);
+
+  document.getElementById("ear-threshold")!.textContent = settings.thresholds.earThreshold.toFixed(2);
 
   // Show/hide optional metric cards based on enabled detectors
   updateVisibleMetricCards(settings);
@@ -134,14 +121,23 @@ function updateVisibleMetricCards(settings: AttentionSettings) {
  * Setup event listeners
  */
 function setupEventListeners() {
+  // Camera toggle
+  toggleCameraBtn.addEventListener("click", toggleCamera);
+
+  // Threshold sliders
+  thresholdSliders.ear.addEventListener("input", (e) => {
+    thresholdValues.ear.textContent = (e.target as HTMLInputElement).value;
+  });
+  thresholdSliders.drowsy.addEventListener("input", (e) => {
+    thresholdValues.drowsy.textContent = parseFloat((e.target as HTMLInputElement).value).toFixed(1);
+  });
+  thresholdSliders.microsleep.addEventListener("input", (e) => {
+    thresholdValues.microsleep.textContent = parseFloat((e.target as HTMLInputElement).value).toFixed(1);
+  });
+
   // Settings buttons
   saveSettingsBtn.addEventListener("click", saveSettings);
-
-  // Master toggle
-  enableDetectionCheckbox.addEventListener("change", () => {
-    const enabled = enableDetectionCheckbox.checked;
-    updateDetectionStatus(enabled);
-  });
+  resetSettingsBtn.addEventListener("click", resetSettings);
 
   // Detector checkboxes - update visible cards
   Object.values(detectorCheckboxes).forEach((checkbox) => {
@@ -150,13 +146,42 @@ function setupEventListeners() {
       updateVisibleMetricCards(tempSettings);
     });
   });
+}
 
-  // Test detection button (opens preview page)
-  const testDetectionBtn = document.getElementById("test-detection-btn");
-  if (testDetectionBtn) {
-    testDetectionBtn.addEventListener("click", () => {
-      chrome.tabs.create({ url: chrome.runtime.getURL("src/cameraPreview.html") });
-    });
+/**
+ * Toggle camera on/off
+ */
+async function toggleCamera() {
+  if (!cameraActive) {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480 },
+      });
+      webcam.srcObject = stream;
+      cameraActive = true;
+      toggleCameraBtn.textContent = "Stop Camera";
+
+      // Notify background that camera is active
+      chrome.runtime.sendMessage({ type: "CAMERA_STARTED" });
+
+      console.log("[CameraPage] Camera started");
+    } catch (error) {
+      console.error("[CameraPage] Failed to start camera:", error);
+      alert("Failed to access camera. Please check permissions.");
+    }
+  } else {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      webcam.srcObject = null;
+      stream = null;
+    }
+    cameraActive = false;
+    toggleCameraBtn.textContent = "Start Camera";
+
+    // Notify background that camera stopped
+    chrome.runtime.sendMessage({ type: "CAMERA_STOPPED" });
+
+    console.log("[CameraPage] Camera stopped");
   }
 }
 
@@ -167,10 +192,7 @@ function updateMetricsUI(data: any) {
   // Update attention state
   const state = data.state as AttentionState;
   attentionStateEl.textContent = state.toUpperCase();
-  attentionStateEl.className = `value state-${state}`;
-
-  // Update last update time
-  lastUpdateEl.textContent = new Date().toLocaleTimeString();
+  attentionStateEl.className = `metric-value state-${state}`;
 
   // Update metrics
   if (data.metrics.earValue !== undefined) {
@@ -181,9 +203,7 @@ function updateMetricsUI(data: any) {
     closedDurationEl.textContent = data.metrics.eyesClosedDuration.toFixed(1) + "s";
   }
 
-  if (data.confidence !== undefined) {
-    confidenceEl.textContent = (data.confidence * 100).toFixed(0) + "%";
-  }
+  confidenceEl.textContent = (data.confidence * 100).toFixed(0) + "%";
 
   // Update optional metrics
   if (data.metrics.blinkRate !== undefined) {
@@ -222,9 +242,9 @@ function getSettingsFromUI(): AttentionSettings {
       blinkRate: detectorCheckboxes.blinkRate.checked,
     },
     thresholds: {
-      earThreshold: 0.22, // Fixed
-      drowsySeconds: 1.5, // Fixed
-      microsleepSeconds: 3.0, // Fixed
+      earThreshold: parseFloat(thresholdSliders.ear.value),
+      drowsySeconds: parseFloat(thresholdSliders.drowsy.value),
+      microsleepSeconds: parseFloat(thresholdSliders.microsleep.value),
     },
   };
 }
@@ -237,6 +257,9 @@ async function saveSettings() {
     settings = getSettingsFromUI();
     await saveAttentionSettings(settings);
 
+    // Update UI
+    document.getElementById("ear-threshold")!.textContent = settings.thresholds.earThreshold.toFixed(2);
+
     // Notify background
     chrome.runtime.sendMessage({
       type: "ATTENTION_SETTINGS_UPDATED",
@@ -244,7 +267,7 @@ async function saveSettings() {
     });
 
     // Show feedback
-    saveSettingsBtn.textContent = "Saved";
+    saveSettingsBtn.textContent = "Saved!";
     setTimeout(() => {
       saveSettingsBtn.textContent = "Save Settings";
     }, 2000);
@@ -253,6 +276,29 @@ async function saveSettings() {
   } catch (error) {
     console.error("[CameraPage] Failed to save settings:", error);
     alert("Failed to save settings");
+  }
+}
+
+/**
+ * Reset settings to defaults
+ */
+async function resetSettings() {
+  if (confirm("Reset all settings to defaults?")) {
+    try {
+      settings = await resetAttentionSettings();
+      populateSettingsUI(settings);
+
+      // Notify background
+      chrome.runtime.sendMessage({
+        type: "ATTENTION_SETTINGS_UPDATED",
+        payload: settings,
+      });
+
+      console.log("[CameraPage] Settings reset to defaults");
+    } catch (error) {
+      console.error("[CameraPage] Failed to reset settings:", error);
+      alert("Failed to reset settings");
+    }
   }
 }
 

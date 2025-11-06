@@ -9,13 +9,90 @@ import {
   getCurrentAttentionState,
   isAttentionDetectionActive,
 } from "./attentionDetector";
+import { getTrackingSettings } from "./trackingSettings";
 
 const POLL_INTERVAL_MS = 30000; // 30 seconds - reduces AI costs significantly
 const IDLE_DETECTION_INTERVAL_SEC = 15; // chrome.idle uses seconds
 const VISION_CHECK_INTERVAL = 2; // Run vision AI every 2nd check (60 seconds)
 
-// Tab locking state - prevents user from switching tabs when alert is active
-let lockedTabId: number | null = null;
+// Offscreen document for camera detection
+let offscreenDocumentCreated = false;
+
+/**
+ * Create offscreen document for camera detection
+ */
+async function createOffscreenDocument(): Promise<void> {
+  if (offscreenDocumentCreated) {
+    console.log("[Background] Offscreen document already exists");
+    return;
+  }
+
+  try {
+    await chrome.offscreen.createDocument({
+      url: chrome.runtime.getURL("src/offscreen.html"),
+      reasons: [chrome.offscreen.Reason.USER_MEDIA],
+      justification: "Camera access for drowsiness detection"
+    });
+    offscreenDocumentCreated = true;
+    console.log("[Background] ✓ Offscreen document created");
+  } catch (error) {
+    console.error("[Background] Failed to create offscreen document:", error);
+    throw error;
+  }
+}
+
+/**
+ * Close offscreen document
+ */
+async function closeOffscreenDocument(): Promise<void> {
+  if (!offscreenDocumentCreated) return;
+
+  try {
+    await chrome.offscreen.closeDocument();
+    offscreenDocumentCreated = false;
+    console.log("[Background] Offscreen document closed");
+  } catch (error) {
+    console.error("[Background] Failed to close offscreen document:", error);
+  }
+}
+
+/**
+ * Initialize camera detection via offscreen document
+ */
+async function initCameraDetection(): Promise<void> {
+  try {
+    console.log("[Background] Initializing camera detection...");
+
+    // Create offscreen document if needed
+    await createOffscreenDocument();
+
+    // Tell offscreen document to start camera
+    const response = await chrome.runtime.sendMessage({ type: "START_CAMERA_DETECTION" });
+
+    if (response?.success) {
+      console.log("[Background] ✓ Camera detection started in offscreen document");
+    } else {
+      console.error("[Background] Failed to start camera detection:", response?.error);
+    }
+  } catch (error) {
+    console.error("[Background] Camera detection init failed:", error);
+  }
+}
+
+/**
+ * Stop camera detection
+ */
+async function stopCameraDetection(): Promise<void> {
+  try {
+    if (offscreenDocumentCreated) {
+      await chrome.runtime.sendMessage({ type: "STOP_CAMERA_DETECTION" });
+      await closeOffscreenDocument();
+      console.log("[Background] Camera detection stopped");
+    }
+  } catch (error) {
+    console.error("[Background] Failed to stop camera detection:", error);
+  }
+}
 
 // Analytics tracking - track page visit duration
 let lastPageUrl: string | null = null;
@@ -137,11 +214,11 @@ async function captureAndSendSnapshot() {
 
     // WEIGHTED AVERAGE CONFIDENCE SCORING
     // Vision typically returns 90-95% confidence, NOT 100%, so adjust accordingly
-    // Vision weight: 60%, Domain: 40%
-    // Threshold: 0.50 (50% weighted confidence triggers alert)
-    const VISION_WEIGHT = 0.6; // Vision AI is powerful but not absolute
-    const DOMAIN_WEIGHT = 0.4; // Domain auto-flagging has significant weight
-    const OFF_TASK_THRESHOLD = 0.5; // 50% threshold - auto-flagged domains will trigger even if vision says on-task
+    // Vision weight: 80%, Domain: 20%
+    // Threshold: 0.40 (40% weighted confidence triggers alert)
+    const VISION_WEIGHT = 0.8; // Vision AI is highly accurate and should dominate
+    const DOMAIN_WEIGHT = 0.2; // Domain heuristics provide some signal but less reliable
+    const OFF_TASK_THRESHOLD = 0.4; // 40% threshold - more aggressive detection
 
     if (userWorkTask) {
       console.log(`[Background] User is working on: "${userWorkTask}"`);
@@ -369,42 +446,79 @@ chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
   }
 });
 
-// Capture when switching tabs (and enforce tab locking if active)
-chrome.tabs.onActivated.addListener((activeInfo) => {
+// Capture when switching tabs
+chrome.tabs.onActivated.addListener(() => {
   console.log("[Background] Tab activated, sending snapshot");
-
-  // If a tab is locked and user tries to switch away, force them back
-  if (lockedTabId !== null && activeInfo.tabId !== lockedTabId) {
-    console.log(`[Background] TAB LOCKED! Forcing back to tab ${lockedTabId}`);
-    chrome.tabs.update(lockedTabId, { active: true });
-    return; // Don't capture snapshot for the brief switch
-  }
-
   captureAndSendSnapshot();
 });
 
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, _sendResponse) => {
-  // Lock the tab when alert is triggered
+  // Handle drowsiness detection from offscreen document
+  if (message.type === "DROWSINESS_DETECTED") {
+    console.log("[Background] Drowsiness detected from offscreen document:", message.payload);
+
+    // Forward to all tabs' content scripts
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach((tab) => {
+        if (tab.id) {
+          chrome.tabs.sendMessage(tab.id, message).catch(() => {
+            // Ignore errors for tabs that don't have content script
+          });
+        }
+      });
+    });
+  }
+
+  // Handle attention updates from offscreen document
+  if (message.type === "ATTENTION_UPDATE") {
+    // Could store these for analytics or forward to camera settings page
+    // For now, just log occasionally
+  }
+
+  // Handle camera detection ready notification
+  if (message.type === "CAMERA_DETECTION_READY") {
+    console.log("[Background] Camera detection is ready and running");
+  }
+
+  // Handle tracking settings updates
+  if (message.type === "TRACKING_SETTINGS_UPDATED") {
+    const settings = message.payload;
+    console.log("[Background] Tracking settings updated:", settings);
+
+    if (settings.cameraTrackingEnabled) {
+      initCameraDetection();
+    } else {
+      stopCameraDetection();
+    }
+  }
+
+  // Forward GET_CAMERA_STATUS requests to offscreen document
+  if (message.type === "GET_CAMERA_STATUS") {
+    if (offscreenDocumentCreated) {
+      // Forward message to offscreen document and return its response
+      chrome.runtime.sendMessage(message).then(_sendResponse).catch(() => {
+        _sendResponse({ isRunning: false, frameCount: 0 });
+      });
+      return true; // Keep channel open for async response
+    } else {
+      _sendResponse({ isRunning: false, frameCount: 0 });
+    }
+  }
+
+  // Alert triggered - no longer locking tabs
   if (message.type === "ALERT_TRIGGERED") {
-    lockedTabId = sender.tab?.id || null;
-    console.log(
-      `[Background] TAB LOCKED: ${lockedTabId} - User cannot escape until puzzle is solved`
-    );
+    console.log("[Background] Alert triggered");
   }
 
-  // Handle alert completion (drowsiness - just unlock)
+  // Handle alert completion
   if (message.type === "ALERT_COMPLETED") {
-    console.log("[Background] Alert completed - unlocking tabs");
-    lockedTabId = null;
+    console.log("[Background] Alert completed");
   }
 
-  // Unlock tabs and close off-task tab when puzzle is completed
+  // Close off-task tab when puzzle is completed
   if (message.type === "CLOSE_OFF_TASK_TAB") {
-    console.log("[Background] Puzzle solved! Unlocking tabs and closing off-task tab");
-
-    // UNLOCK TABS FIRST
-    lockedTabId = null;
+    console.log("[Background] Puzzle solved! Closing off-task tab");
 
     // Close the current tab
     if (sender.tab?.id) {
@@ -446,6 +560,16 @@ initNetworkTracking();
 
 // Initialize attention detection
 initAttentionDetection();
+
+// Initialize camera detection if enabled
+getTrackingSettings().then((settings) => {
+  if (settings.cameraTrackingEnabled) {
+    console.log("[Background] Camera tracking is enabled, starting detection...");
+    initCameraDetection();
+  } else {
+    console.log("[Background] Camera tracking is disabled");
+  }
+});
 
 // Initial capture on startup
 captureAndSendSnapshot();

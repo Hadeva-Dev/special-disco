@@ -1,0 +1,6 @@
+{
+  "instructions": [
+    "Do NOT create git commits unless explicitly told to by the user",
+    "Make all requested changes but leave them uncommitted for the user to review and commit themselves"
+  ]
+}

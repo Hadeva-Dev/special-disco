@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Camera Tracking - Focus Tracker</title>
+    <link rel="stylesheet" href="./cameraPage.css" />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <h1>📹 Camera Attention Tracking</h1>
+        <p class="subtitle">Real-time drowsiness and attention monitoring</p>
+      </header>
+
+      <!-- Camera Control -->
+      <section class="camera-section">
+        <div class="video-container">
+          <video id="webcam" autoplay playsinline></video>
+          <canvas id="overlay" class="overlay-canvas"></canvas>
+          <div id="status-indicator" class="status-indicator"></div>
+        </div>
+
+        <div class="camera-controls">
+          <button id="toggle-camera" class="btn btn-primary">Start Camera</button>
+          <button id="toggle-overlay" class="btn btn-secondary">Show Overlay</button>
+        </div>
+      </section>
+
+      <!-- Live Metrics -->
+      <section class="metrics-section">
+        <h2>Live Metrics</h2>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Attention State</div>
+            <div id="attention-state" class="metric-value state-awake">AWAKE</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Eye Aspect Ratio</div>
+            <div id="ear-value" class="metric-value">--</div>
+            <div class="metric-subtext">Threshold: <span id="ear-threshold">0.22</span></div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Eyes Closed Duration</div>
+            <div id="closed-duration" class="metric-value">0.0s</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Confidence</div>
+            <div id="confidence" class="metric-value">--</div>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card" id="blink-rate-card" style="display: none;">
+            <div class="metric-label">Blink Rate</div>
+            <div id="blink-rate" class="metric-value">-- bpm</div>
+          </div>
+          <div class="metric-card" id="gaze-card" style="display: none;">
+            <div class="metric-label">Gaze Direction</div>
+            <div id="gaze-direction" class="metric-value">Center</div>
+          </div>
+          <div class="metric-card" id="head-pose-card" style="display: none;">
+            <div class="metric-label">Head Tilt</div>
+            <div id="head-tilt" class="metric-value">0°</div>
+          </div>
+          <div class="metric-card" id="yawning-card" style="display: none;">
+            <div class="metric-label">Yawning</div>
+            <div id="yawning-status" class="metric-value">No</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section class="settings-section">
+        <h2>Detection Settings</h2>
+
+        <div class="setting-group">
+          <label class="setting-toggle">
+            <input type="checkbox" id="enable-detection" checked />
+            <span class="toggle-label">Enable Attention Detection</span>
+          </label>
+        </div>
+
+        <div class="settings-grid">
+          <div class="setting-group">
+            <h3>Detectors</h3>
+            <label class="setting-toggle">
+              <input type="checkbox" id="detector-drowsiness" checked />
+              <span class="toggle-label">Drowsiness (EAR)</span>
+            </label>
+            <label class="setting-toggle">
+              <input type="checkbox" id="detector-microsleep" checked />
+              <span class="toggle-label">Microsleep Detection</span>
+            </label>
+            <label class="setting-toggle">
+              <input type="checkbox" id="detector-yawning" />
+              <span class="toggle-label">Yawning Detection</span>
+            </label>
+            <label class="setting-toggle">
+              <input type="checkbox" id="detector-gaze" />
+              <span class="toggle-label">Gaze Direction</span>
+            </label>
+            <label class="setting-toggle">
+              <input type="checkbox" id="detector-head-pose" />
+              <span class="toggle-label">Head Pose Tracking</span>
+            </label>
+            <label class="setting-toggle">
+              <input type="checkbox" id="detector-blink-rate" />
+              <span class="toggle-label">Blink Rate Analysis</span>
+            </label>
+          </div>
+
+          <div class="setting-group">
+            <h3>Thresholds</h3>
+            <div class="slider-group">
+              <label>EAR Threshold: <span id="ear-threshold-value">0.22</span></label>
+              <input type="range" id="threshold-ear" min="0.15" max="0.30" step="0.01" value="0.22" />
+              <small>Lower = more sensitive</small>
+            </div>
+            <div class="slider-group">
+              <label>Drowsy After: <span id="drowsy-seconds-value">1.5</span>s</label>
+              <input type="range" id="threshold-drowsy" min="0.5" max="5.0" step="0.1" value="1.5" />
+            </div>
+            <div class="slider-group">
+              <label>Microsleep After: <span id="microsleep-seconds-value">3.0</span>s</label>
+              <input type="range" id="threshold-microsleep" min="1.0" max="10.0" step="0.5" value="3.0" />
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-actions">
+          <button id="save-settings" class="btn btn-primary">Save Settings</button>
+          <button id="reset-settings" class="btn btn-secondary">Reset to Defaults</button>
+        </div>
+      </section>
+
+      <!-- Info Section -->
+      <section class="info-section">
+        <h3>About Attention Detection</h3>
+        <div class="info-grid">
+          <div class="info-card">
+            <h4>Drowsiness (EAR)</h4>
+            <p>Monitors eye closure using Eye Aspect Ratio. When your eyes stay closed for the threshold duration, you'll be alerted.</p>
+          </div>
+          <div class="info-card">
+            <h4>Microsleep</h4>
+            <p>Detects longer periods of eye closure (3+ seconds by default), indicating brief sleep episodes.</p>
+          </div>
+          <div class="info-card">
+            <h4>Yawning</h4>
+            <p>Monitors mouth opening patterns to detect yawning, an early sign of fatigue.</p>
+          </div>
+          <div class="info-card">
+            <h4>Gaze Direction</h4>
+            <p>Tracks where you're looking to detect when your attention drifts from the screen.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="./cameraPage.ts"></script>
+  </body>
+</html>

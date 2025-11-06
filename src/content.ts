@@ -422,8 +422,33 @@ function showOffTaskAlert(snapshot: ScreenSnapshot, isDrowsiness = false) {
   }
 }
 
+// Camera detection now runs in offscreen document (background.ts manages it)
+// No need to initialize in content script anymore
+
 // Listen for messages from the background script
 chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
+  if (message.type === "DROWSINESS_DETECTED") {
+    // Direct drowsiness detection from camera
+    const drowsinessSnapshot = {
+      state: "off_task" as const,
+      confidence: message.payload.confidence || 0.9,
+      t: Date.now(),
+      context: {
+        visualVerification: {
+          verified: false,
+          isOffTask: true,
+          confidence: message.payload.confidence || 0.9,
+          detectedContent: `Drowsiness detected: ${message.payload.state}`,
+          reasoning: `Eyes closed for ${message.payload.metrics?.eyesClosedDuration?.toFixed(1)}s. Wake up!`,
+          recommendation: "focus" as const,
+        },
+      },
+    };
+
+    showOffTaskAlert(drowsinessSnapshot, true); // true = drowsiness mode
+    return;
+  }
+
   if (message.type === "DROWSINESS_ALERT") {
     // Handle drowsiness alert - show puzzle but DON'T close tab
     console.log("[Content Script] 🚨 DROWSINESS ALERT TRIGGERED:", message.payload);
@@ -473,18 +498,19 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
     });
 
     // AGGRESSIVE MODE: Trigger alert for known off-task categories immediately
-    // OR if vision AI says "focus"
+    // OR if vision AI says "focus" or "warning"
     const shouldTriggerAlert =
       snapshot.state === "off_task" &&
-      snapshot.confidence >= 0.8 &&
+      snapshot.confidence >= 0.4 && // Matches backend threshold - very aggressive
       // Trigger immediately for known distracting categories
       (snapshot.context?.appCategory === "social" ||
         snapshot.context?.appCategory === "sports" ||
         snapshot.context?.appCategory === "games" ||
         snapshot.context?.appCategory === "shopping" ||
         snapshot.context?.appCategory === "video" ||
-        // OR if vision verification confirms off-task
-        snapshot.context?.visualVerification?.recommendation === "focus");
+        // OR if vision verification confirms off-task (focus or warning)
+        snapshot.context?.visualVerification?.recommendation === "focus" ||
+        snapshot.context?.visualVerification?.recommendation === "warning");
 
     if (shouldTriggerAlert) {
       console.log("[Content Script] ⚠️⚠️⚠️ OFF-TASK DETECTED - TRIGGERING NUCLEAR ALERT ⚠️⚠️⚠️");

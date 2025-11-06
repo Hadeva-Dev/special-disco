@@ -32,59 +32,43 @@ body {
   opacity: 0.9;
 }
 
-/* Camera Section */
-.camera-section {
-  background: white;
+/* Header Notice */
+.header-notice {
+  background: #fef3c7;
+  border: 2px solid #f59e0b;
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  color: #78350f;
 }
 
-.video-container {
-  position: relative;
-  width: 100%;
-  max-width: 640px;
-  margin: 0 auto 20px;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #000;
-}
-
-#webcam {
-  width: 100%;
-  height: auto;
+.header-notice strong {
   display: block;
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+  color: #92400e;
 }
 
-.overlay-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
+.header-notice ol {
+  margin-left: 20px;
+  margin-bottom: 10px;
 }
 
-.status-indicator {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+.header-notice li {
+  margin-bottom: 5px;
+  font-size: 0.95rem;
 }
 
-.camera-controls {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
+.notice-subtext {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #fbbf24;
+  font-size: 0.875rem;
+  font-style: italic;
 }
 
-/* Metrics Section */
-.metrics-section, .settings-section, .info-section {
+/* Status Section */
+.status-section {
   background: white;
   border-radius: 12px;
   padding: 20px;
@@ -92,7 +76,73 @@ body {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.metrics-section h2, .settings-section h2, .info-section h3 {
+.status-section h2 {
+  margin-bottom: 20px;
+  color: #1f2937;
+}
+
+.status-card {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-left: 4px solid #667eea;
+}
+
+.status-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.status-label {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.status-value {
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: #10b981;
+}
+
+.status-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-item .label {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.status-item .value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* Settings Section */
+.settings-section, .info-section {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.settings-section h2, .info-section h2 {
   margin-bottom: 20px;
   color: #1f2937;
 }
@@ -148,17 +198,39 @@ body {
 }
 
 /* Settings */
-.settings-grid {
+.master-toggle {
+  background: #f9fafb;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border-left: 4px solid #667eea;
+}
+
+.setting-description {
+  margin-top: 5px;
+  margin-left: 28px;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.detectors-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 30px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
   margin-bottom: 20px;
 }
 
-.setting-group h3 {
-  font-size: 1.125rem;
-  margin-bottom: 15px;
-  color: #374151;
+.detector-card {
+  background: #f3f4f6;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.detector-description {
+  margin-top: 5px;
+  margin-left: 28px;
+  font-size: 0.75rem;
+  color: #6b7280;
 }
 
 .setting-toggle {
@@ -206,6 +278,20 @@ body {
 .setting-actions {
   display: flex;
   gap: 10px;
+  margin-bottom: 15px;
+}
+
+.info-box {
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+  padding: 12px 15px;
+  border-radius: 6px;
+  margin-top: 15px;
+}
+
+.info-box strong {
+  color: #1e40af;
+  font-size: 0.875rem;
 }
 
 /* Buttons */
@@ -274,12 +360,12 @@ body {
     font-size: 1.75rem;
   }
 
-  .metrics-grid, .settings-grid, .info-grid {
+  .metrics-grid, .detectors-grid, .info-grid {
     grid-template-columns: 1fr;
   }
 
-  .camera-controls {
-    flex-direction: column;
+  .status-details {
+    grid-template-columns: 1fr;
   }
 
   .setting-actions {

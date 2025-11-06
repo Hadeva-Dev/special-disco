@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "Screen Activity Tracker",
+  "name": "Focus Tracker with Drowsiness Detection",
   "version": "1.0.0",
-  "description": "Tracks active tabs and categorizes on-task/off-task behavior",
+  "description": "Tracks screen activity + webcam-based drowsiness detection to keep you focused",
   "permissions": [
     "tabs",
     "idle",
     "storage",
     "webRequest",
     "activeTab",
-    "scripting"
+    "scripting",
+    "offscreen"
   ],
   "host_permissions": [
     "<all_urls>"

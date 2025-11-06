@@ -54,9 +54,9 @@ function updateUI(snapshot: ScreenSnapshot) {
   statusIndicator.className = `status-indicator ${snapshot.state.replace("_", "-")}`;
 
   if (snapshot.state === "on_task") {
-    statusText.textContent = "On Task ✓";
+    statusText.textContent = "On Task";
   } else {
-    statusText.textContent = "Off Task ⚠";
+    statusText.textContent = "Off Task";
   }
 
   // Update stats
@@ -200,7 +200,7 @@ chrome.storage.onChanged.addListener((changes: { [key: string]: chrome.storage.S
   }
 });
 
-// Puzzle Challenge System for Disabling Extension
+// Puzzle Challenge System for Disbling Extension
 let currentPuzzle: Puzzle | null = null;
 let puzzlesSolved = 0;
 const REQUIRED_PUZZLES = 10;
@@ -240,7 +240,7 @@ function checkPuzzleAnswer() {
   if (userAnswer === correctAnswer) {
     // CORRECT!
     puzzlesSolved++;
-    puzzleFeedback.textContent = "✓ Correct!";
+    puzzleFeedback.textContent = "Correct!";
     puzzleFeedback.className = "puzzle-feedback correct";
 
     if (puzzlesSolved >= REQUIRED_PUZZLES) {
@@ -259,7 +259,7 @@ function checkPuzzleAnswer() {
     }
   } else {
     // WRONG!
-    puzzleFeedback.textContent = "✗ Wrong! Try again.";
+    puzzleFeedback.textContent = "Wrong! Try again.";
     puzzleFeedback.className = "puzzle-feedback incorrect";
     puzzleAnswer.value = "";
     puzzleAnswer.focus();
@@ -327,3 +327,77 @@ analyticsBtn.addEventListener("click", () => {
 cameraBtn.addEventListener("click", () => {
   chrome.tabs.create({ url: chrome.runtime.getURL("src/camera.html") });
 });
+
+// Load tracking settings and add toggle handlers
+import { getTrackingSettings, saveTrackingSettings } from "./trackingSettings";
+import { TrackingSettings } from "./shared/types";
+
+// Check if we have tracking toggle elements (newer UI)
+const webTrackingToggle = document.getElementById("web-tracking-toggle") as HTMLInputElement | null;
+const cameraTrackingToggle = document.getElementById("camera-tracking-toggle") as HTMLInputElement | null;
+
+if (webTrackingToggle && cameraTrackingToggle) {
+  // Initialize tracking settings
+  getTrackingSettings().then(settings => {
+    if (webTrackingToggle && cameraTrackingToggle) {
+      webTrackingToggle.checked = settings.webTrackingEnabled;
+      cameraTrackingToggle.checked = settings.cameraTrackingEnabled;
+    }
+  });
+
+  // Save settings when changed
+  async function saveTrackingToggles() {
+    if (!webTrackingToggle || !cameraTrackingToggle) return;
+
+    const settings: TrackingSettings = {
+      webTrackingEnabled: webTrackingToggle.checked,
+      cameraTrackingEnabled: cameraTrackingToggle.checked,
+    };
+
+    await saveTrackingSettings(settings);
+
+    chrome.runtime.sendMessage({
+      type: "TRACKING_SETTINGS_UPDATED",
+      payload: settings,
+    });
+
+    console.log("[Popup] Tracking settings saved:", settings);
+  }
+
+  webTrackingToggle.addEventListener("change", saveTrackingToggles);
+  cameraTrackingToggle.addEventListener("change", saveTrackingToggles);
+}
+
+// Live camera status display
+const cameraStatusElement = document.getElementById("camera-status");
+
+async function updateCameraStatus() {
+  if (!cameraStatusElement) return;
+
+  try {
+    // Query the offscreen document for camera status
+    const response = await chrome.runtime.sendMessage({ type: "GET_CAMERA_STATUS" });
+
+    if (response?.isRunning) {
+      cameraStatusElement.textContent = `Active (${response.frameCount || 0} frames)`;
+      cameraStatusElement.style.color = "#10b981"; // green
+    } else {
+      const settings = await getTrackingSettings();
+      if (settings.cameraTrackingEnabled) {
+        cameraStatusElement.textContent = "Ready (toggle on to start)";
+        cameraStatusElement.style.color = "#6b7280"; // gray
+      } else {
+        cameraStatusElement.textContent = "Drowsiness detection";
+        cameraStatusElement.style.color = "#6b7280"; // gray
+      }
+    }
+  } catch (error) {
+    // Offscreen document might not be created yet
+    cameraStatusElement.textContent = "Drowsiness detection";
+    cameraStatusElement.style.color = "#6b7280";
+  }
+}
+
+// Update camera status on load and every 2 seconds
+updateCameraStatus();
+setInterval(updateCameraStatus, 2000);

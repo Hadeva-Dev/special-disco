@@ -45,7 +45,7 @@
       </div>
 
       <div id="alert-section" class="alert-section hidden">
-        <div class="alert-icon">⚠️</div>
+        <div class="alert-icon">!</div>
         <div id="alert-message" class="alert-message"></div>
       </div>
 
@@ -55,14 +55,41 @@
       </div>
 
       <div class="settings-section">
+        <!-- Tracking Modes -->
+        <div class="tracking-modes-section">
+          <div class="section-title">Tracking Modes</div>
+
+          <div class="tracking-mode-item">
+            <div class="mode-info">
+              <span class="mode-label">Web Tracking</span>
+              <span class="mode-desc">Screen activity + AI detection</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="web-tracking-toggle" checked />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="tracking-mode-item">
+            <div class="mode-info">
+              <span class="mode-label">Camera Tracking</span>
+              <span class="mode-desc" id="camera-status">Drowsiness detection</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="camera-tracking-toggle" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
         <div class="session-context-section">
           <div class="section-title">What are you working on?</div>
           <div class="current-task" id="current-task">Not set</div>
           <button id="set-task-btn" class="btn btn-task">Set Task</button>
         </div>
 
-        <button id="camera-btn" class="btn btn-camera">📹 Camera Tracking</button>
-        <button id="analytics-btn" class="btn btn-analytics">📊 View Analytics</button>
+        <button id="camera-btn" class="btn btn-camera">Camera Settings</button>
+        <button id="analytics-btn" class="btn btn-analytics">View Analytics</button>
         <button id="disable-btn" class="btn btn-danger">Disable Extension</button>
         <button id="enable-btn" class="btn btn-success hidden">Re-enable Extension</button>
       </div>

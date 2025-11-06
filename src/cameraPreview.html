@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test Camera Detection</title>
+    <link rel="stylesheet" href="./cameraPreview.css" />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header -->
+      <header class="header">
+        <h1>🎥 Test Camera Detection</h1>
+        <p class="subtitle">See how attention detection works in real-time</p>
+      </header>
+
+      <!-- Camera Section -->
+      <section class="camera-section">
+        <div class="video-container">
+          <video id="webcam" autoplay playsinline></video>
+          <canvas id="overlay-canvas" class="overlay-canvas"></canvas>
+          <div id="status-indicator" class="status-indicator"></div>
+        </div>
+
+        <div class="camera-controls">
+          <button id="start-camera-btn" class="btn btn-primary">📹 Start Camera</button>
+          <button id="stop-camera-btn" class="btn btn-secondary" disabled>⏹️ Stop Camera</button>
+        </div>
+
+        <div id="camera-error" class="error-message" style="display: none;"></div>
+      </section>
+
+      <!-- Live Metrics -->
+      <section class="metrics-section">
+        <h2>Live Detection Metrics</h2>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Attention State</div>
+            <div id="attention-state" class="metric-value state-awake">AWAKE</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Eye Aspect Ratio</div>
+            <div id="ear-value" class="metric-value">--</div>
+            <div class="metric-subtext">Normal: 0.20-0.30</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Eyes Closed Duration</div>
+            <div id="closed-duration" class="metric-value">0.0s</div>
+            <div class="metric-subtext">Alert at 1.5s</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Confidence</div>
+            <div id="confidence" class="metric-value">--</div>
+            <div class="metric-subtext">Detection accuracy</div>
+          </div>
+        </div>
+
+        <!-- Optional Metrics (shown based on settings) -->
+        <div class="metrics-grid optional-metrics">
+          <div class="metric-card" id="blink-rate-card" style="display: none;">
+            <div class="metric-label">Blink Rate</div>
+            <div id="blink-rate" class="metric-value">--</div>
+            <div class="metric-subtext">Blinks per minute</div>
+          </div>
+          <div class="metric-card" id="gaze-card" style="display: none;">
+            <div class="metric-label">Gaze Direction</div>
+            <div id="gaze-direction" class="metric-value">On-screen</div>
+          </div>
+          <div class="metric-card" id="head-pose-card" style="display: none;">
+            <div class="metric-label">Head Tilt</div>
+            <div id="head-tilt" class="metric-value">--</div>
+            <div class="metric-subtext">Degrees from center</div>
+          </div>
+          <div class="metric-card" id="yawning-card" style="display: none;">
+            <div class="metric-label">Yawning</div>
+            <div id="yawning-status" class="metric-value">No</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Info Section -->
+      <section class="info-section">
+        <h2>How to Test</h2>
+        <div class="info-grid">
+          <div class="info-card">
+            <h4>🎯 Step 1: Start Camera</h4>
+            <p>Click "Start Camera" and allow camera access when prompted. Make sure your face is visible and well-lit.</p>
+          </div>
+          <div class="info-card">
+            <h4>👁️ Step 2: Test Detection</h4>
+            <p>Try closing your eyes for 2-3 seconds to test drowsiness detection. Watch the metrics update in real-time.</p>
+          </div>
+          <div class="info-card">
+            <h4>✅ Step 3: Verify Settings</h4>
+            <p>Make sure the enabled detectors in your settings are working as expected. Adjust if needed.</p>
+          </div>
+          <div class="info-card">
+            <h4>🔒 Privacy Note</h4>
+            <p>All processing happens locally in your browser. No video or images are sent anywhere.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Back Button -->
+      <div class="actions">
+        <button id="back-to-settings" class="btn btn-secondary">← Back to Settings</button>
+      </div>
+    </div>
+
+    <script type="module" src="./cameraPreview.ts"></script>
+  </body>
+</html>

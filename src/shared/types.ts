@@ -19,6 +19,12 @@ export type SessionContext = {
   declared: boolean;
 };
 
+// Tracking mode settings
+export type TrackingSettings = {
+  webTrackingEnabled: boolean; // Screen activity + AI vision detection
+  cameraTrackingEnabled: boolean; // Webcam-based drowsiness detection
+};
+
 // Attention detection settings
 export type AttentionSettings = {
   enabled: boolean;
