@@ -17,6 +17,11 @@ export type SessionContext = {
   declared: boolean;
 };
 
+// Tracking mode settings
+export type TrackingSettings = {
+  webTrackingEnabled: boolean; // Screen activity + AI vision detection
+};
+
 export type ScreenSnapshot = {
   t: number;
   state: ScreenState;

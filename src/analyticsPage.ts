@@ -98,13 +98,27 @@ async function renderDashboard(daysBack: number = 7) {
       summary.topOffTaskDomains.forEach((domain, index) => {
         const domainItem = document.createElement("div");
         domainItem.className = "domain-item";
-        domainItem.innerHTML = `
-          <div class="domain-info">
-            <div class="domain-name">${index + 1}. ${domain.domain}</div>
-            <div class="domain-stats">${domain.visits} visits • Avg ${formatTime(domain.averageTime)}</div>
-          </div>
-          <div class="domain-time">${formatTime(domain.totalTime)}</div>
-        `;
+
+        const domainInfo = document.createElement("div");
+        domainInfo.className = "domain-info";
+
+        const domainName = document.createElement("div");
+        domainName.className = "domain-name";
+        domainName.textContent = `${index + 1}. ${domain.domain}`;
+
+        const domainStats = document.createElement("div");
+        domainStats.className = "domain-stats";
+        domainStats.textContent = `${domain.visits} visits • Avg ${formatTime(domain.averageTime)}`;
+
+        domainInfo.appendChild(domainName);
+        domainInfo.appendChild(domainStats);
+
+        const domainTime = document.createElement("div");
+        domainTime.className = "domain-time";
+        domainTime.textContent = formatTime(domain.totalTime);
+
+        domainItem.appendChild(domainInfo);
+        domainItem.appendChild(domainTime);
         domainsListEl.appendChild(domainItem);
       });
     }
@@ -118,12 +132,22 @@ async function renderDashboard(daysBack: number = 7) {
       summary.topDistractions.forEach((distraction, index) => {
         const distractionItem = document.createElement("div");
         distractionItem.className = "distraction-item";
-        distractionItem.innerHTML = `
-          <div class="distraction-info">
-            <div class="distraction-name">${index + 1}. ${distraction.content}</div>
-          </div>
-          <div class="distraction-count">${distraction.count}x</div>
-        `;
+
+        const distractionInfo = document.createElement("div");
+        distractionInfo.className = "distraction-info";
+
+        const distractionName = document.createElement("div");
+        distractionName.className = "distraction-name";
+        distractionName.textContent = `${index + 1}. ${distraction.content}`;
+
+        distractionInfo.appendChild(distractionName);
+
+        const distractionCount = document.createElement("div");
+        distractionCount.className = "distraction-count";
+        distractionCount.textContent = `${distraction.count}x`;
+
+        distractionItem.appendChild(distractionInfo);
+        distractionItem.appendChild(distractionCount);
         distractionsListEl.appendChild(distractionItem);
       });
     }
@@ -137,13 +161,27 @@ async function renderDashboard(daysBack: number = 7) {
       summary.categoryBreakdown.forEach((category) => {
         const categoryItem = document.createElement("div");
         categoryItem.className = "category-item";
-        categoryItem.innerHTML = `
-          <div class="category-info">
-            <div class="category-name">${category.category}</div>
-            <div class="category-stats">${category.visits} visits</div>
-          </div>
-          <div class="category-time">${formatTime(category.time)}</div>
-        `;
+
+        const categoryInfo = document.createElement("div");
+        categoryInfo.className = "category-info";
+
+        const categoryName = document.createElement("div");
+        categoryName.className = "category-name";
+        categoryName.textContent = category.category;
+
+        const categoryStats = document.createElement("div");
+        categoryStats.className = "category-stats";
+        categoryStats.textContent = `${category.visits} visits`;
+
+        categoryInfo.appendChild(categoryName);
+        categoryInfo.appendChild(categoryStats);
+
+        const categoryTime = document.createElement("div");
+        categoryTime.className = "category-time";
+        categoryTime.textContent = formatTime(category.time);
+
+        categoryItem.appendChild(categoryInfo);
+        categoryItem.appendChild(categoryTime);
         categoriesListEl.appendChild(categoryItem);
       });
     }
@@ -165,20 +203,21 @@ async function renderDashboard(daysBack: number = 7) {
           month: "short",
           day: "numeric",
         });
-        dailyItem.innerHTML = `
-          <div class="daily-info">
-            <div class="daily-date">${
-              formattedDate
-            }</div>
-              formattedDate
-            }</div>
-            <div class="daily-stats">
-              ${formatTime(day.onTaskTime)} on-task (${onTaskPercent.toFixed(0)}%) •
-              ${formatTime(day.offTaskTime)} off-task •
-              ${day.alertsTriggered} alerts
-            </div>
-          </div>
-        `;
+
+        const dailyInfo = document.createElement("div");
+        dailyInfo.className = "daily-info";
+
+        const dailyDate = document.createElement("div");
+        dailyDate.className = "daily-date";
+        dailyDate.textContent = formattedDate;
+
+        const dailyStats = document.createElement("div");
+        dailyStats.className = "daily-stats";
+        dailyStats.textContent = `${formatTime(day.onTaskTime)} on-task (${onTaskPercent.toFixed(0)}%) • ${formatTime(day.offTaskTime)} off-task • ${day.alertsTriggered} alerts`;
+
+        dailyInfo.appendChild(dailyDate);
+        dailyInfo.appendChild(dailyStats);
+        dailyItem.appendChild(dailyInfo);
         dailyListEl.appendChild(dailyItem);
       });
     }

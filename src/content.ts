@@ -1,5 +1,5 @@
 import { ScreenSnapshot } from "./shared/types";
-import { generatePuzzle } from "./puzzles";
+import { generatePuzzle, type Puzzle } from "./puzzles";
 
 console.log("[Content Script] Loaded");
 
@@ -118,47 +118,117 @@ function playAlarmSound() {
 
 /**
  * Shows fullscreen red alert overlay with BRUTAL wake-up mechanics
+ * @param snapshot - The screen snapshot that triggered the alert
+ * @param isDrowsiness - If true, this is a drowsiness alert (don't close tab after solving)
  */
-function showOffTaskAlert(snapshot: ScreenSnapshot) {
+async function showOffTaskAlert(snapshot: ScreenSnapshot, isDrowsiness = false) {
   // Don't create duplicate alerts
   if (alertElement) return;
 
   // Generate random puzzle for verification
-  const puzzle = generatePuzzle();
+  let puzzle: Puzzle;
+  try {
+    puzzle = await generatePuzzle();
+  } catch (error) {
+    console.error("[Content Script] Failed to load puzzle bank, using fallback math puzzle.", error);
+    puzzle = {
+      question: "12 + 7 = ?",
+      answer: "19",
+      type: "math",
+    };
+  }
   let clickCount = 0;
   const requiredClicks = 10;
 
   alertElement = document.createElement("div");
   alertElement.id = "focus-tracker-alert";
-  alertElement.innerHTML = `
-    <div class="focus-alert-content">
-      <div class="focus-alert-icon">🚨</div>
-      <h1 class="focus-alert-title">OFF TASK DETECTED</h1>
-      <p class="focus-alert-message">
-        ${snapshot.context?.visualVerification?.detectedContent || "STOP SLACKING OFF!"}
-      </p>
-      <div class="focus-alert-details">
-        ${snapshot.context?.visualVerification?.reasoning || "You are wasting time!"}
-      </div>
-      <div id="wake-up-challenge">
-        <p class="challenge-text">Click "I'M AWAKE" ${requiredClicks} times to continue:</p>
-        <p class="click-counter" id="click-counter">0 / ${requiredClicks}</p>
-        <button id="focus-alert-click" class="focus-alert-btn pulse-btn">
-          I'M AWAKE!
-        </button>
-      </div>
-      <div id="captcha-challenge" style="display: none;">
-        <p class="challenge-text">Solve this to prove you're conscious:</p>
-        <p class="puzzle-type-badge">${puzzle.type.toUpperCase()}</p>
-        <p class="math-problem">${puzzle.question}</p>
-        <input type="text" id="captcha-input" class="captcha-input" placeholder="Answer">
-        <button id="captcha-submit" class="focus-alert-btn">
-          SUBMIT
-        </button>
-        <p id="captcha-error" class="captcha-error"></p>
-      </div>
-    </div>
-  `;
+
+  const alertContent = document.createElement("div");
+  alertContent.className = "focus-alert-content";
+
+  const alertIcon = document.createElement("div");
+  alertIcon.className = "focus-alert-icon";
+  alertIcon.textContent = "🚨";
+
+  const alertTitle = document.createElement("h1");
+  alertTitle.className = "focus-alert-title";
+  alertTitle.textContent = "OFF TASK DETECTED";
+
+  const alertMessage = document.createElement("p");
+  alertMessage.className = "focus-alert-message";
+  alertMessage.textContent = snapshot.context?.visualVerification?.detectedContent || "STOP SLACKING OFF!";
+
+  const alertDetails = document.createElement("div");
+  alertDetails.className = "focus-alert-details";
+  alertDetails.textContent = snapshot.context?.visualVerification?.reasoning || "You are wasting time!";
+
+  const wakeUpChallenge = document.createElement("div");
+  wakeUpChallenge.id = "wake-up-challenge";
+
+  const challengeText = document.createElement("p");
+  challengeText.className = "challenge-text";
+  challengeText.textContent = `Click "I'M AWAKE" ${requiredClicks} times to continue:`;
+
+  const clickCounter = document.createElement("p");
+  clickCounter.className = "click-counter";
+  clickCounter.id = "click-counter";
+  clickCounter.textContent = `0 / ${requiredClicks}`;
+
+  const focusAlertButton = document.createElement("button");
+  focusAlertButton.id = "focus-alert-click";
+  focusAlertButton.className = "focus-alert-btn pulse-btn";
+  focusAlertButton.textContent = "I'M AWAKE!";
+
+  wakeUpChallenge.appendChild(challengeText);
+  wakeUpChallenge.appendChild(clickCounter);
+  wakeUpChallenge.appendChild(focusAlertButton);
+
+  const captchaChallenge = document.createElement("div");
+  captchaChallenge.id = "captcha-challenge";
+  captchaChallenge.style.display = "none";
+
+  const captchaChallengeText = document.createElement("p");
+  captchaChallengeText.className = "challenge-text";
+  captchaChallengeText.textContent = "Solve this to prove you're conscious:";
+
+  const puzzleTypeBadge = document.createElement("p");
+  puzzleTypeBadge.className = "puzzle-type-badge";
+  puzzleTypeBadge.textContent = puzzle.type.toUpperCase();
+
+  const mathProblem = document.createElement("p");
+  mathProblem.className = "math-problem";
+  mathProblem.textContent = puzzle.question;
+
+  const captchaInput = document.createElement("input");
+  captchaInput.type = "text";
+  captchaInput.id = "captcha-input";
+  captchaInput.className = "captcha-input";
+  captchaInput.placeholder = "Answer";
+
+  const captchaSubmit = document.createElement("button");
+  captchaSubmit.id = "captcha-submit";
+  captchaSubmit.className = "focus-alert-btn";
+  captchaSubmit.textContent = "SUBMIT";
+
+  const captchaError = document.createElement("p");
+  captchaError.id = "captcha-error";
+  captchaError.className = "captcha-error";
+
+  captchaChallenge.appendChild(captchaChallengeText);
+  captchaChallenge.appendChild(puzzleTypeBadge);
+  captchaChallenge.appendChild(mathProblem);
+  captchaChallenge.appendChild(captchaInput);
+  captchaChallenge.appendChild(captchaSubmit);
+  captchaChallenge.appendChild(captchaError);
+
+  alertContent.appendChild(alertIcon);
+  alertContent.appendChild(alertTitle);
+  alertContent.appendChild(alertMessage);
+  alertContent.appendChild(alertDetails);
+  alertContent.appendChild(wakeUpChallenge);
+  alertContent.appendChild(captchaChallenge);
+
+  alertElement.appendChild(alertContent);
 
   // Inject styles
   const style = document.createElement("style");
@@ -349,54 +419,60 @@ function showOffTaskAlert(snapshot: ScreenSnapshot) {
 
   // Handle "I'M AWAKE" button clicks
   const clickBtn = document.getElementById("focus-alert-click");
-  const clickCounter = document.getElementById("click-counter");
-  const wakeUpChallenge = document.getElementById("wake-up-challenge");
-  const captchaChallenge = document.getElementById("captcha-challenge");
+  const clickCounterEl = document.getElementById("click-counter");
+  const wakeUpChallengeEl = document.getElementById("wake-up-challenge");
+  const captchaChallengeEl = document.getElementById("captcha-challenge");
 
   clickBtn?.addEventListener("click", () => {
     clickCount++;
-    if (clickCounter) {
-      clickCounter.textContent = `${clickCount} / ${requiredClicks}`;
+    if (clickCounterEl) {
+      clickCounterEl.textContent = `${clickCount} / ${requiredClicks}`;
     }
 
     if (clickCount >= requiredClicks) {
       // Move to captcha challenge
-      if (wakeUpChallenge) wakeUpChallenge.style.display = "none";
-      if (captchaChallenge) captchaChallenge.style.display = "block";
+      if (wakeUpChallengeEl) wakeUpChallengeEl.style.display = "none";
+      if (captchaChallengeEl) captchaChallengeEl.style.display = "block";
     }
   });
 
   // Handle captcha submission
-  const captchaSubmit = document.getElementById("captcha-submit");
-  const captchaInput = document.getElementById("captcha-input") as HTMLInputElement;
-  const captchaError = document.getElementById("captcha-error");
+  const captchaSubmitBtn = document.getElementById("captcha-submit");
+  const captchaInputEl = document.getElementById("captcha-input") as HTMLInputElement;
+  const captchaErrorEl = document.getElementById("captcha-error");
 
   const checkCaptcha = () => {
-    const userAnswer = (captchaInput?.value || "").trim().toLowerCase();
+    const userAnswer = (captchaInputEl?.value || "").trim().toLowerCase();
     const correctAnswer = puzzle.answer.toLowerCase();
 
     if (userAnswer === correctAnswer) {
-      // SUCCESS! Close this tab and switch to last on-task tab
+      // SUCCESS!
       clearInterval(alarmInterval);
       alertElement?.remove();
       alertElement = null;
 
-      // Tell background to unlock tabs and close this one
-      chrome.runtime.sendMessage({ type: "CLOSE_OFF_TASK_TAB" });
+      if (isDrowsiness) {
+        // For drowsiness: just unlock tabs, keep current tab open
+        chrome.runtime.sendMessage({ type: "ALERT_COMPLETED" });
+        console.log("[Content Script] ✅ Drowsiness alert solved - staying on current tab");
+      } else {
+        // For off-task: close this tab and switch to last on-task tab
+        chrome.runtime.sendMessage({ type: "CLOSE_OFF_TASK_TAB" });
+      }
     } else {
       // WRONG! Try again
-      if (captchaError) {
-        captchaError.textContent = "WRONG! Try again and WAKE UP!";
+      if (captchaErrorEl) {
+        captchaErrorEl.textContent = "WRONG! Try again and WAKE UP!";
       }
-      if (captchaInput) {
-        captchaInput.value = "";
-        captchaInput.focus();
+      if (captchaInputEl) {
+        captchaInputEl.value = "";
+        captchaInputEl.focus();
       }
     }
   };
 
-  captchaSubmit?.addEventListener("click", checkCaptcha);
-  captchaInput?.addEventListener("keypress", (e) => {
+  captchaSubmitBtn?.addEventListener("click", checkCaptcha);
+  captchaInputEl?.addEventListener("keypress", (e) => {
     if (e.key === "Enter") {
       checkCaptcha();
     }
@@ -414,8 +490,13 @@ function showOffTaskAlert(snapshot: ScreenSnapshot) {
   }
 }
 
+// Camera detection now runs in offscreen document (background.ts manages it)
+// No need to initialize in content script anymore
+
 // Listen for messages from the background script
 chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
+  // Camera/drowsiness detection removed - no DROWSINESS_ALERT or DROWSINESS_DETECTED handlers
+
   if (message.type === "SCREEN_SNAPSHOT") {
     const snapshot = message.payload as ScreenSnapshot;
 
@@ -425,7 +506,7 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
         type: "SCREEN_SNAPSHOT",
         payload: snapshot,
       },
-      "*"
+      window.location.origin
     );
     console.log("[Content Script] Forwarded SCREEN_SNAPSHOT to page");
 
@@ -439,18 +520,19 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
     });
 
     // AGGRESSIVE MODE: Trigger alert for known off-task categories immediately
-    // OR if vision AI says "focus"
+    // OR if vision AI says "focus" or "warning"
     const shouldTriggerAlert =
       snapshot.state === "off_task" &&
-      snapshot.confidence >= 0.8 &&
+      snapshot.confidence >= 0.4 && // Matches backend threshold - very aggressive
       // Trigger immediately for known distracting categories
       (snapshot.context?.appCategory === "social" ||
         snapshot.context?.appCategory === "sports" ||
         snapshot.context?.appCategory === "games" ||
         snapshot.context?.appCategory === "shopping" ||
         snapshot.context?.appCategory === "video" ||
-        // OR if vision verification confirms off-task
-        snapshot.context?.visualVerification?.recommendation === "focus");
+        // OR if vision verification confirms off-task (focus or warning)
+        snapshot.context?.visualVerification?.recommendation === "focus" ||
+        snapshot.context?.visualVerification?.recommendation === "warning");
 
     if (shouldTriggerAlert) {
       console.log("[Content Script] ⚠️⚠️⚠️ OFF-TASK DETECTED - TRIGGERING NUCLEAR ALERT ⚠️⚠️⚠️");
@@ -462,7 +544,7 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
 
       // Delay alert slightly to avoid spam
       alarmTimeout = setTimeout(() => {
-        showOffTaskAlert(snapshot);
+        void showOffTaskAlert(snapshot);
       }, 1000) as unknown as number;
     } else {
       console.log("[Content Script] Alert NOT triggered - conditions not met");
@@ -488,7 +570,7 @@ window.addEventListener("message", async (event) => {
           type: "SCREEN_SNAPSHOT",
           payload: snapshot,
         },
-        "*"
+        window.location.origin
       );
       console.log("[Content Script] Sent stored snapshot to page");
     } else {

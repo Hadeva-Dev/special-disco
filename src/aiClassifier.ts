@@ -96,8 +96,28 @@ Return ONLY a JSON array (no markdown, no extra text), one object per domain:
     const data = await response.json();
     const content = data.content[0].text;
 
-    // Parse JSON response
-    const classifications = JSON.parse(content) as DomainClassification[];
+    // Parse JSON response with validation
+    let classifications: DomainClassification[];
+    try {
+      const parsed = JSON.parse(content);
+
+      // Validate structure
+      if (!Array.isArray(parsed)) {
+        throw new Error("Expected array of classifications");
+      }
+
+      // Validate each item has required fields
+      classifications = parsed.filter(item => {
+        if (typeof item.domain !== 'string' || typeof item.category !== 'string') {
+          console.warn("[AI Classifier] Invalid classification item:", item);
+          return false;
+        }
+        return true;
+      });
+    } catch (parseError) {
+      console.error("[AI Classifier] Invalid JSON response:", parseError);
+      return [];
+    }
 
     console.log("[AI Classifier] Classifications:", classifications);
     return classifications;
@@ -168,40 +188,50 @@ export async function verifyScreenWithVision(
     ? `\n- User's declared work task: "${userWorkTask}"\n- IMPORTANT: Judge content based on alignment with this specific task`
     : `\n- User has NOT declared a specific work task\n- Use default context: coding, documentation, research, writing = ON-TASK; social media, games, shopping, videos = OFF-TASK`;
 
-  const prompt = `You are verifying if a user is on-task or distracted based on their screen content.
+  const prompt = `You are a balanced productivity monitor analyzing if a user is genuinely distracted or productively working.
 
 Context:
 - Active tab URL: ${activeTabUrl}
 - Why this was flagged: ${suspiciousReason}${workTaskContext}
 
-Analyze the screenshot and determine:
-1. What content is actually visible on screen?
-2. Is this content on-task (work/study related) or off-task (distraction)?
-3. Confidence level (0-1)
-4. Should the user be warned to refocus?
+Analyze the screenshot fairly and objectively:
 
-Consider:
-- If a SPECIFIC work task is declared, judge based on that context:
-  - "Shopping for furniture" → furniture shopping sites = ON-TASK
-  - "Researching NBA analytics" → sports sites = ON-TASK
-  - "Learning video editing" → YouTube tutorials = ON-TASK
-- If NO specific task is declared, use general productivity rules:
-  - Coding, documentation, research, writing, learning = ON-TASK
-  - Social media feeds, games, sports for entertainment, random shopping, entertainment videos = OFF-TASK
+Flag as OFF-TASK only if you see CLEAR EVIDENCE of distraction:
+✗ Social media browsing (scrolling feeds, looking at unrelated posts)
+✗ Video entertainment (watching non-educational videos, streams)
+✗ Gaming or game-related content
+✗ Shopping unrelated to work
+✗ News/sports consumption (unless task-related)
+✗ Memes, entertainment, or clearly off-task browsing
+
+Flag as ON-TASK if you see:
+✓ Coding/programming/development work
+✓ Reading technical documentation or learning materials
+✓ Research, writing, or content creation
+✓ Email, messaging, or professional communication
+✓ Task management, planning, or organization
+✓ Educational content (even YouTube tutorials)
+✓ Any activity aligned with the user's declared task
+
+BALANCED APPROACH:
+- If it looks like productive work, mark it ON-TASK
+- If it's clearly entertainment/distraction, mark it OFF-TASK
+- When uncertain or seeing mixed signals, lean toward ON-TASK (confidence 0.5-0.7)
+- Only use high confidence (0.9+) for obvious distractions
 
 Return ONLY a JSON object (no markdown, no extra text):
 {
-  "isOffTask": true,
-  "confidence": 0.95,
-  "reasoning": "User is watching gaming content on YouTube",
-  "detectedContent": "YouTube video player showing Minecraft gameplay",
-  "recommendation": "focus"
+  "isOffTask": false,
+  "confidence": 0.6,
+  "reasoning": "User appears to be reading technical content",
+  "detectedContent": "Documentation or learning material visible",
+  "recommendation": "ok"
 }
 
 Recommendation values:
-- "focus": User is clearly off-task, needs to refocus
-- "warning": Borderline off-task, mild warning
-- "ok": Actually on-task despite network flags`;
+- "focus": Clearly off-task with high confidence (obvious entertainment/distraction)
+- "warning": Borderline case, unclear if productive
+- "ok": Appears to be productive work or learning`;
 
   try {
     const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
@@ -236,13 +266,13 @@ Recommendation values:
       console.error("[AI Vision] Gemini API error:", response.status);
       const errorText = await response.text();
       console.error("[AI Vision] Error details:", errorText);
-      // Fallback: assume network analysis was correct
+      // Don't trigger alerts on API failures
       return {
-        isOffTask: true,
-        confidence: 0.5,
-        reasoning: "Vision API unavailable, relying on network analysis",
-        detectedContent: "Unable to analyze",
-        recommendation: "warning",
+        isOffTask: false, // Changed to false to prevent false positives
+        confidence: 0, // Changed to 0 so it won't trigger alerts
+        reasoning: "Vision API error - not triggering alert to avoid false positives",
+        detectedContent: "API error",
+        recommendation: "ok", // Changed to "ok" to prevent triggering
       };
     }
 
@@ -251,12 +281,13 @@ Recommendation values:
 
     if (!content) {
       console.error("[AI Vision] No content in Gemini response:", data);
+      // Return API_FAILURE marker so we don't trigger false alerts
       return {
-        isOffTask: true,
-        confidence: 0.5,
-        reasoning: "Vision analysis failed - no content",
-        detectedContent: "Unable to analyze",
-        recommendation: "warning",
+        isOffTask: false, // Changed to false to prevent false positives
+        confidence: 0, // Changed to 0 so it won't trigger alerts
+        reasoning: "Vision API returned empty response - likely rate limited or blocked",
+        detectedContent: "API unavailable",
+        recommendation: "ok", // Changed to "ok" to prevent triggering
       };
     }
 
@@ -266,20 +297,50 @@ Recommendation values:
       .replace(/```\n?/g, "")
       .trim();
 
-    // Parse JSON response
-    const verification = JSON.parse(cleanedContent) as VisualVerification;
+    // Parse JSON response with validation
+    let verification: VisualVerification;
+    try {
+      const parsed = JSON.parse(cleanedContent);
+
+      // Validate required fields
+      if (typeof parsed.isOffTask !== 'boolean' ||
+          typeof parsed.confidence !== 'number' ||
+          typeof parsed.reasoning !== 'string' ||
+          typeof parsed.detectedContent !== 'string' ||
+          typeof parsed.recommendation !== 'string') {
+        throw new Error("Invalid vision verification structure");
+      }
+
+      // Validate recommendation value
+      const validRecommendations = ['focus', 'warning', 'ok'];
+      if (!validRecommendations.includes(parsed.recommendation)) {
+        console.warn("[AI Vision] Invalid recommendation:", parsed.recommendation);
+        parsed.recommendation = 'ok'; // Safe default
+      }
+
+      verification = parsed as VisualVerification;
+    } catch (parseError) {
+      console.error("[AI Vision] Invalid JSON response:", parseError);
+      return {
+        isOffTask: false,
+        confidence: 0,
+        reasoning: "Failed to parse vision API response",
+        detectedContent: "Parse error",
+        recommendation: "ok",
+      };
+    }
 
     console.log("[AI Vision] Gemini verification result:", verification);
     return verification;
   } catch (error) {
     console.error("[AI Vision] Error:", error);
-    // Fallback
+    // Don't trigger alerts on API failures/exceptions
     return {
-      isOffTask: true,
-      confidence: 0.5,
-      reasoning: "Vision analysis failed",
-      detectedContent: "Unable to analyze",
-      recommendation: "warning",
+      isOffTask: false, // Changed to false to prevent false positives
+      confidence: 0, // Changed to 0 so it won't trigger alerts
+      reasoning: "Vision analysis exception - not triggering alert to avoid false positives",
+      detectedContent: "API exception",
+      recommendation: "ok", // Changed to "ok" to prevent triggering
     };
   }
 }

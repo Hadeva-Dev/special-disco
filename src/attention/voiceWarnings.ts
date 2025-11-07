@@ -5,7 +5,7 @@
  */
 
 let speechSynthesis: SpeechSynthesis | null = null;
-let currentUtterance: SpeechSynthesisUtterance | null = null;
+let _currentUtterance: SpeechSynthesisUtterance | null = null;
 let lastSpokenMessage: string | null = null;
 let lastSpokenTime: number = 0;
 let isSpeaking: boolean = false; // Prevent overlapping calls
@@ -71,7 +71,7 @@ export function cancelVoiceWarning(): void {
   if (speech && speech.speaking) {
     speech.cancel();
   }
-  currentUtterance = null;
+  _currentUtterance = null;
   lastSpokenMessage = null;
   lastSpokenTime = 0;
 }
@@ -172,7 +172,7 @@ export function speakWarning(message: string, priority: 'low' | 'medium' | 'high
     console.log('[Voice Warning] Speech resumed');
   };
 
-  currentUtterance = utterance;
+  _currentUtterance = utterance;
 
   // Failsafe: If no callbacks fire within 2 seconds, count as failure and use audio fallback
   const failsafeTimeout = setTimeout(() => {

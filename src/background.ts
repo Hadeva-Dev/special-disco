@@ -9,9 +9,6 @@ const POLL_INTERVAL_MS = 30000; // 30 seconds - reduces AI costs significantly
 const IDLE_DETECTION_INTERVAL_SEC = 15; // chrome.idle uses seconds
 const VISION_CHECK_INTERVAL = 2; // Run vision AI every 2nd check (60 seconds)
 
-// Tab locking state - prevents user from switching tabs when alert is active
-let lockedTabId: number | null = null;
-
 // Analytics tracking - track page visit duration
 let lastPageUrl: string | null = null;
 let lastPageStartTime: number | null = null;
@@ -20,7 +17,7 @@ let lastPageTitle: string | null = null;
 // Vision throttling - track check count
 let checkCounter = 0;
 
-// Set idle detection interval
+// Set idle detection intervals
 chrome.idle.setDetectionInterval(IDLE_DETECTION_INTERVAL_SEC);
 
 /**
@@ -97,25 +94,6 @@ async function captureAndSendSnapshot() {
       },
     };
 
-    // AUTO-FLAGGED DOMAINS: Always off-task regardless of content
-    const AUTO_FLAGGED_DOMAINS = [
-      "youtube.com",
-      "reddit.com",
-      "twitter.com",
-      "x.com",
-      "facebook.com",
-      "instagram.com",
-      "tiktok.com",
-      "twitch.tv",
-      "netflix.com",
-      "hulu.com",
-      "espn.com",
-      "cnn.com",
-      "nytimes.com",
-      "buzzfeed.com",
-      "9gag.com",
-    ];
-
     let currentDomain = "";
     try {
       currentDomain = new URL(activeTab.url).hostname.replace("www.", "");
@@ -123,20 +101,42 @@ async function captureAndSendSnapshot() {
       console.error("[Background] Failed to parse URL for domain check:", e);
     }
 
-    const isAutoFlagged = AUTO_FLAGGED_DOMAINS.some((domain) => currentDomain.includes(domain));
+    // Load custom domain lists
+    const { domainWhitelist, domainBlacklist } = await chrome.storage.local.get([
+      "domainWhitelist",
+      "domainBlacklist",
+    ]);
+    const whitelist = (domainWhitelist as string[] | undefined) || [];
+    const blacklist = (domainBlacklist as string[] | undefined) || [];
+
+    // Check whitelist first (always on-task, never flagged)
+    const isWhitelisted = whitelist.some((domain) => currentDomain.includes(domain));
+    if (isWhitelisted) {
+      console.log(`[Background] ✅ WHITELISTED DOMAIN: ${currentDomain} - Always considered on-task`);
+    }
+
+    // Check blacklist second (always off-task)
+    const isBlacklisted = blacklist.some((domain) => currentDomain.includes(domain));
+    if (isBlacklisted) {
+      console.log(`[Background] ❌ BLACKLISTED DOMAIN: ${currentDomain} - Always considered off-task`);
+    }
+
+    // Final determination: whitelist overrides everything, then blacklist
+    const isForcedOffTask = !isWhitelisted && isBlacklisted;
 
     // VISION THROTTLING: Only run expensive AI checks periodically
-    // BUT always run vision on auto-flagged domains (to get content description)
+    // BUT always run vision on forced off-task domains (to get content description)
+    // SKIP vision on whitelisted domains (always on-task)
     checkCounter++;
-    const shouldRunVision = isAutoFlagged || checkCounter % VISION_CHECK_INTERVAL === 0;
+    const shouldRunVision = !isWhitelisted && (isForcedOffTask || checkCounter % VISION_CHECK_INTERVAL === 0);
 
     // WEIGHTED AVERAGE CONFIDENCE SCORING
     // Vision typically returns 90-95% confidence, NOT 100%, so adjust accordingly
-    // Vision weight: 60%, Domain: 40%
-    // Threshold: 0.50 (50% weighted confidence triggers alert)
-    const VISION_WEIGHT = 0.6; // Vision AI is powerful but not absolute
-    const DOMAIN_WEIGHT = 0.4; // Domain auto-flagging has significant weight
-    const OFF_TASK_THRESHOLD = 0.5; // 50% threshold - auto-flagged domains will trigger even if vision says on-task
+    // Vision weight: 80%, Domain: 20%
+    // Threshold: 0.40 (40% weighted confidence triggers alert)
+    const VISION_WEIGHT = 0.8; // Vision AI is highly accurate and should dominate
+    const DOMAIN_WEIGHT = 0.2; // Domain heuristics provide some signal but less reliable
+    const OFF_TASK_THRESHOLD = 0.4; // 40% threshold - more aggressive detection
 
     if (userWorkTask) {
       console.log(`[Background] User is working on: "${userWorkTask}"`);
@@ -147,13 +147,17 @@ async function captureAndSendSnapshot() {
     let screenshot = null;
     if (shouldRunVision) {
       console.log(
-        `[Background] Running vision AI check (${isAutoFlagged ? "auto-flagged domain" : `periodic check ${checkCounter}`})`
+        `[Background] Running vision AI check (${isForcedOffTask ? "forced off-task domain" : `periodic check ${checkCounter}`})`
       );
       screenshot = await captureActiveTab();
     } else {
-      console.log(
-        `[Background] Skipping vision check (${checkCounter}) - using domain analysis only`
-      );
+      if (isWhitelisted) {
+        console.log(`[Background] Skipping vision check - whitelisted domain (always on-task)`);
+      } else {
+        console.log(
+          `[Background] Skipping vision check (${checkCounter}) - using domain analysis only`
+        );
+      }
     }
     if (screenshot) {
       const base64Image = dataUrlToBase64(screenshot);
@@ -186,10 +190,15 @@ async function captureAndSendSnapshot() {
       // Confidence that this domain is typically used for off-task activities
       let domainConfidence = 0.0; // Neutral baseline for unknown domains
 
-      if (isAutoFlagged) {
-        domainConfidence = 1.0; // 100% - auto-flagged always-off-task domain
+      if (isWhitelisted) {
+        domainConfidence = 0.0; // 0% - whitelisted domains are never off-task
         console.log(
-          `[Background] 🚩 AUTO-FLAGGED DOMAIN: ${currentDomain} - Always considered off-task`
+          `[Background] ✅ WHITELISTED DOMAIN: ${currentDomain} - Never considered off-task`
+        );
+      } else if (isBlacklisted) {
+        domainConfidence = 1.0; // 100% - blacklisted always-off-task domain
+        console.log(
+          `[Background] ❌ BLACKLISTED DOMAIN: ${currentDomain} - Always considered off-task`
         );
       } else if (aiAnalysis.offTaskDomains.length > 0) {
         domainConfidence = 1.0; // 100% - known off-task domain
@@ -203,17 +212,26 @@ async function captureAndSendSnapshot() {
         ? visionResult.confidence // Use AI's confidence directly (0.0 - 1.0)
         : 0.0; // 0% confidence it's off-task if vision says on-task
 
-      // AUTO-FLAGGED DOMAINS OVERRIDE: Skip weighted scoring entirely
+      // FORCED DOMAIN OVERRIDES: Skip weighted scoring for whitelist/blacklist/auto-flagged
       let weightedScore: number;
       let finalState: "on_task" | "off_task";
 
-      if (isAutoFlagged) {
-        // Auto-flagged domains are ALWAYS off-task, no matter what vision says
+      if (isWhitelisted) {
+        // Whitelisted domains are ALWAYS on-task, no matter what vision says
+        weightedScore = 0.0; // 0% off-task confidence
+        finalState = "on_task";
+        console.log(`[Background] ✅ WHITELISTED DOMAIN OVERRIDE: ${currentDomain}
+Vision said: ${visionResult.isOffTask ? "Off-task" : "On-task"} (${(visionConfidence * 100).toFixed(1)}%)
+Override: WHITELISTED domains are always on-task
+Final: ON-TASK (100% confidence)`);
+      } else if (isForcedOffTask) {
+        // Blacklisted/auto-flagged domains are ALWAYS off-task, no matter what vision says
         weightedScore = 0.95; // Fixed 95% confidence
         finalState = "off_task";
-        console.log(`[Background] 🚩 AUTO-FLAGGED DOMAIN OVERRIDE: ${currentDomain}
+        const reason = isBlacklisted ? "BLACKLISTED" : "AUTO-FLAGGED";
+        console.log(`[Background] 🚩 ${reason} DOMAIN OVERRIDE: ${currentDomain}
 Vision said: ${visionResult.isOffTask ? "Off-task" : "On-task"} (${(visionConfidence * 100).toFixed(1)}%)
-Override: AUTO-FLAGGED domains are always off-task
+Override: ${reason} domains are always off-task
 Final: OFF-TASK (95% confidence)`);
       } else {
         // Normal weighted scoring for non-auto-flagged domains
@@ -251,10 +269,14 @@ Final: OFF-TASK (95% confidence)`);
       }
     } else {
       // No vision check - use domain analysis only
-      if (isAutoFlagged) {
+      if (isWhitelisted) {
+        enhancedSnapshot.state = "on_task";
+        enhancedSnapshot.confidence = 1.0;
+        console.log(`[Background] ✅ WHITELISTED DOMAIN (no vision): ${currentDomain} - ON-TASK`);
+      } else if (isBlacklisted) {
         enhancedSnapshot.state = "off_task";
         enhancedSnapshot.confidence = 0.95;
-        console.log(`[Background] 🚩 AUTO-FLAGGED DOMAIN (no vision): ${currentDomain} - OFF-TASK`);
+        console.log(`[Background] ❌ BLACKLISTED DOMAIN (no vision): ${currentDomain} - OFF-TASK`);
       } else if (aiAnalysis.offTaskDomains.length > 0) {
         enhancedSnapshot.state = "off_task";
         enhancedSnapshot.confidence = 0.9;
@@ -273,6 +295,7 @@ Final: OFF-TASK (95% confidence)`);
         console.log("[Background] Unknown domain (no vision) - ON-TASK");
       }
     }
+
 
     // ANALYTICS: Record every snapshot to track focused time continuously
     const currentUrl = activeTab.url;
@@ -352,36 +375,34 @@ chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
   }
 });
 
-// Capture when switching tabs (and enforce tab locking if active)
-chrome.tabs.onActivated.addListener((activeInfo) => {
+// Capture when switching tabs
+chrome.tabs.onActivated.addListener(() => {
   console.log("[Background] Tab activated, sending snapshot");
-
-  // If a tab is locked and user tries to switch away, force them back
-  if (lockedTabId !== null && activeInfo.tabId !== lockedTabId) {
-    console.log(`[Background] TAB LOCKED! Forcing back to tab ${lockedTabId}`);
-    chrome.tabs.update(lockedTabId, { active: true });
-    return; // Don't capture snapshot for the brief switch
-  }
-
   captureAndSendSnapshot();
 });
 
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((message, sender, _sendResponse) => {
-  // Lock the tab when alert is triggered
-  if (message.type === "ALERT_TRIGGERED") {
-    lockedTabId = sender.tab?.id || null;
-    console.log(
-      `[Background] TAB LOCKED: ${lockedTabId} - User cannot escape until puzzle is solved`
-    );
+  // Handle tracking settings updates
+  if (message.type === "TRACKING_SETTINGS_UPDATED") {
+    const settings = message.payload;
+    console.log("[Background] Tracking settings updated:", settings);
+    // Camera tracking removed - no action needed
   }
 
-  // Unlock tabs and close off-task tab when puzzle is completed
-  if (message.type === "CLOSE_OFF_TASK_TAB") {
-    console.log("[Background] Puzzle solved! Unlocking tabs and closing off-task tab");
+  // Alert triggered - no longer locking tabs
+  if (message.type === "ALERT_TRIGGERED") {
+    console.log("[Background] Alert triggered");
+  }
 
-    // UNLOCK TABS FIRST
-    lockedTabId = null;
+  // Handle alert completion
+  if (message.type === "ALERT_COMPLETED") {
+    console.log("[Background] Alert completed");
+  }
+
+  // Close off-task tab when puzzle is completed
+  if (message.type === "CLOSE_OFF_TASK_TAB") {
+    console.log("[Background] Puzzle solved! Closing off-task tab");
 
     // Close the current tab
     if (sender.tab?.id) {
