@@ -11,7 +11,6 @@ const path = require('path');
 // let's create a simple solid color version that will work
 // Users can replace with proper icons later using online tools
 
-const sizes = [16, 32, 48, 128];
 
 // Create a simple data URI PNG for each size
 // This is a purple circle with an eye-like design
