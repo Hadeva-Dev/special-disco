@@ -14,11 +14,6 @@ const path = require('path');
 
 // Create a simple data URI PNG for each size
 // This is a purple circle with an eye-like design
-function generateSimpleIcon(size) {
-  // For now, let's just copy the SVG files as a fallback
-  // and provide instructions for the user
-  return null;
-}
 
 console.log('⚠️  PNG icon generation requires additional tools.');
 console.log('');
